@@ -8,8 +8,6 @@ project(blindy_findy)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  cv_bridge
-  image_transport
   roscpp
   sensor_msgs
   std_msgs
@@ -125,7 +123,6 @@ catkin_package(
 include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
-  ${OpenCV_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -206,17 +203,9 @@ include_directories(
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
 
-add_executable(blindy_findy_node src/blindy_findy_node.cpp)
-target_link_libraries(blindy_findy_node
-  ${catkin_LIBRARIES} 
-  ${OpenCV_LIBS}
- )
-add_dependencies(blindy_findy_node blindy_findy_generate_messages_cpp)
 
 add_executable(dummy_blindy_findy_node src/dummy_blindy_findy_node.cpp)
 target_link_libraries(dummy_blindy_findy_node
   ${catkin_LIBRARIES} 
  )
 add_dependencies(dummy_blindy_findy_node dummy_blindy_findy_generate_messages_cpp)
-
-add_dependencies(blindy_findy_node ${catkin_EXPORTED_TARGETS})
