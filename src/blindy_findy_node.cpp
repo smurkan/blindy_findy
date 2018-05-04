@@ -1,15 +1,17 @@
-#include <string>
 #include <ros/ros.h>
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <string>
+#include <fstream>
 #include "blindy_findy/distances.h"
 
-
+static const std::string OPENCV_WINDOW = "Image window";
 
 ros::Publisher* pub;
+bool firstFrame = true;
 
 int ReturnEndOfFloor(float line[], int windowSize, int height)
   {
@@ -38,66 +40,6 @@ float ReturnSmallestDistance(float line[], int index)
      return shortest;
    }
 
-/*void republish()
-    {
-      //VGA setting in ZED parameters
-      int height = 376;
-      int width = 672;
-  
-      float rightline[height];
-      float midline[height];
-      float leftline[height];
-      int numberOfLines = 3;
-      //float lines[numberOfLines][height];
-      bool firstFrame = true;
-      float distVal[3];
-
-      cv_bridge::CvImagePtr localptr = cv_ptr;
-    
-      //-------put code here-----------------------------------------
-      float depthMap[height][width];
-      for(int n=0;n<height;n++)
-      {
-        for(int m=0;m<width;m++)
-        {
-          cv::Scalar intensity = localptr->image.at<float>(n,m);
-          depthMap[n][m]= intensity.val[0];
-          if(m==(height/4))
-            rightline[n] = depthMap[n][m];
-          if(m==(2*height/4))
-            midline[n] = depthMap[n][m];
-          if(m==(3*height/4))
-            leftline[n] = depthMap[n][m];
-        }
-      }
-
-      cv::line(localptr->image, cv::Point(width/4,0),cv::Point(width/4,height),
-   cv::Scalar( 0, 0, 0 ),
-   10,
-   cv::LINE_8);
-      cv::line(localptr->image, cv::Point(2*width/4,0),cv::Point(2*width/4,height),
-   cv::Scalar( 0, 0, 0 ),
-   10,
-   cv::LINE_8);
-      cv::line(localptr->image, cv::Point(3*width/4,0),cv::Point(3*width/4,height),
-   cv::Scalar( 0, 0, 0 ),
-   10,
-   cv::LINE_8);
-
-      distVal[0] = ReturnSmallestDistance(midline, ReturnEndOfFloor(midline, 10, height));
-      distVal[1] = ReturnSmallestDistance(midline, ReturnEndOfFloor(midline, 10, height));
-      distVal[2] = ReturnSmallestDistance(midline, ReturnEndOfFloor(midline, 10, height));
-      printf("VAL: %f\n", distVal[0]);
-      //-------------------------------------------------------------
-      //blindy_findy::distances dmsg;
-        //dmsg.distances.clear();
-      //dmsg.distances.x = distVal[0];
-        //dmsg.distances.y = distVal[1];
-        //dmsg.distances.z = distVal[2];
-      //ROS_INFO("%f", dmsg.distances.x);
-      //pub->publish(dmsg);
-  }*/
-
 
 void Cbfunc(const sensor_msgs::ImageConstPtr& msg)
 {
@@ -120,10 +62,13 @@ void Cbfunc(const sensor_msgs::ImageConstPtr& msg)
   float midline[height];
   float leftline[height];
   float distVal[3];
-  int numberOfLines = 3;
+  //int numberOfLines = 3;
+  int indexL;
+  int indexM;
+  int indexR;
 
     
-  //-------put code here-----------------------------------------
+  //-------extracting pixel values-----------------------------------------
   float depthMap[height][width];
   for(int n=0;n<height;n++)
   {
@@ -131,25 +76,53 @@ void Cbfunc(const sensor_msgs::ImageConstPtr& msg)
     {
       cv::Scalar intensity = cv_ptr->image.at<float>(n,m);
       depthMap[n][m]= intensity.val[0];
-      if(m==(height/4))
+      if(m==(width/4))
          rightline[n] = depthMap[n][m];
-      if(m==(2*height/4))
+      if(m==(2*width/4))
          midline[n] = depthMap[n][m];
-      if(m==(3*height/4))
+      if(m==(3*width/4))
         leftline[n] = depthMap[n][m];
     }
   }
-
-  distVal[0] = ReturnSmallestDistance(leftline, ReturnEndOfFloor(leftline, 10, height));
-  distVal[1] = ReturnSmallestDistance(midline, ReturnEndOfFloor(midline, 10, height));
-  distVal[2] = ReturnSmallestDistance(rightline, ReturnEndOfFloor(rightline, 10, height));
+  //pixel index of nearest object in each line
+  indexL = ReturnEndOfFloor(leftline, 50, height);
+  indexM = ReturnEndOfFloor(midline, 50, height);
+  indexR = ReturnEndOfFloor(rightline, 50, height);
+  //distance values of those pixels
+  distVal[0] = ReturnSmallestDistance(leftline,indexL);
+  distVal[1] = ReturnSmallestDistance(midline,indexM);
+  distVal[2] = ReturnSmallestDistance(rightline,indexR);
   //printf("VAL: %f\n", distVal[0]);
+  if(firstFrame == true)
+  {
+    std::ofstream output("midline_values.txt");
+    for(int i=0;i<height;i++)
+    {
+      output << midline[i] << std::endl;
+    }    
+    output.close();
+    firstFrame = false;
+  }
+  double minVal, maxVal;
+  minMaxLoc(cv_ptr->image, &minVal, &maxVal); //find minimum and maximum intensities
+  cv::Mat blur_img;
+  cv_ptr->image.convertTo(blur_img, CV_8U, 255.0/(maxVal - minVal), -minVal * 255.0/(maxVal - minVal));
+  cv::circle(blur_img, cv::Point((2*width/4), indexM), 10, CV_RGB(255,0,0));
+  cv::imshow(OPENCV_WINDOW, blur_img);
+  cv::waitKey(3);
   //put data in msg and publish-----------------------------------------------------
   blindy_findy::distances dmsg;
   dmsg.distL = distVal[0];
   dmsg.distM = distVal[1];
   dmsg.distR = distVal[2];
-  //ROS_INFO("L: %f\nM: %f\nR: %f\n", dmsg.distL, dmsg.distM, dmsg.distR);
+  dmsg.pixL[0] = (3*width/4);
+  dmsg.pixM[0] = (2*width/4);
+  dmsg.pixR[0] = (width/4);
+  dmsg.pixL[1] =  indexL;
+  dmsg.pixM[1] =  indexM;
+  dmsg.pixR[1] =  indexR;
+
+  ROS_INFO("L: %f\nM: %f\nR: %f\n", dmsg.distL, dmsg.distM, dmsg.distR);
   pub->publish(dmsg);
 }
 
@@ -163,22 +136,23 @@ void Cbfunc(const sensor_msgs::ImageConstPtr& msg)
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "blindy_findyc");
-  //blindy_findyc bf;
+
   ros::NodeHandle nh;
   image_transport::ImageTransport it(nh);
   image_transport::Subscriber image_sub;
-  //image_transport::Publisher image_pub;
+  image_transport::Publisher image_pub;
   //std::string depthTopicName;
 
   //nh.param("publishers/distances_data/topic", publisherTopicName, std::string("/zed/depth/depth_registered"));
   
   ros::Publisher publisher = nh.advertise<blindy_findy::distances>("distances", 1);
   pub = &publisher;
-  image_sub = it.subscribe("/camera/image_raw", 1, Cbfunc);
+  image_sub = it.subscribe("/depth/depth_registered", 1, Cbfunc);
 
-  //republish();
+  image_pub = it.advertise("/output_video", 1);
+  cv::namedWindow(OPENCV_WINDOW);
   
-  
+  cv::destroyWindow(OPENCV_WINDOW);
 
   ros::spin();
   return 0;

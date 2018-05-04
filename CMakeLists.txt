@@ -76,7 +76,7 @@ find_package(OpenCV REQUIRED)
  generate_messages(
   DEPENDENCIES
 #   sensor_msgs
-#   std_msgs
+    std_msgs
     geometry_msgs
  )
 
@@ -218,3 +218,5 @@ target_link_libraries(dummy_blindy_findy_node
   ${catkin_LIBRARIES} 
  )
 add_dependencies(dummy_blindy_findy_node dummy_blindy_findy_generate_messages_cpp)
+
+add_dependencies(blindy_findy_node ${catkin_EXPORTED_TARGETS})
