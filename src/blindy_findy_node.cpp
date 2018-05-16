@@ -107,6 +107,7 @@ void Cbfunc(const sensor_msgs::ImageConstPtr& msg)
   distVal[0] = ReturnSmallestDistance(leftline,indexL);
   distVal[1] = ReturnSmallestDistance(midline,indexM);
   distVal[2] = ReturnSmallestDistance(rightline,indexR);
+  /*
   //for data collecting, writes midline to txt file
   writeToFile(midline, height);
   //produces viewable image
@@ -120,6 +121,7 @@ void Cbfunc(const sensor_msgs::ImageConstPtr& msg)
   cv::circle(blur_img, cv::Point((width/4), indexR), 10, CV_RGB(255,0,0));
   cv::imshow(OPENCV_WINDOW, blur_img);
   cv::waitKey(3);
+  */
   //put data in msg and publish-----------------------------------------------------
   blindy_findy::distances dmsg;
   dmsg.distL = distVal[0];
