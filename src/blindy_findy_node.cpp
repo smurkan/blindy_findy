@@ -8,12 +8,30 @@
 #include <string>
 #include <fstream>
 #include <iostream>
+#include <vector>
+#include <algorithm>
 #include "blindy_findy/distances.h"
+#include "blindy_findy/frame.h"
 
 static const std::string OPENCV_WINDOW = "Image window";
 
 ros::Publisher* pub;
+ros::Publisher* pub2;
 bool firstFrame = true;
+int numberOfWindows = 10;
+
+
+float returnSlope(float line[], int end, int start)
+{
+  std::vector<float> slopes;
+  for (int i = start+1; i <= end; i++)
+  {
+    slopes.push_back(line[i] - line[i-1]);
+    
+  }
+  std::sort(slopes.begin(), slopes.end());
+  return slopes.at(slopes.size()/2);
+}
 
 int ReturnEndOfFloor(float line[], int windowSize, int height)
 {
@@ -23,17 +41,18 @@ int ReturnEndOfFloor(float line[], int windowSize, int height)
   {
     index--;
     {
-      slope = line[(index + 1) * (height - 1) / windowSize] - line[(index * height) / windowSize];
+      slope = returnSlope(line, (index + 1) * (height - 1) / windowSize, (index * (height - 1)) / windowSize);
     }
   }
-  index = (index + 1) * (height - 1) / windowSize;
+  index = (index) * (height - 1) / windowSize;
   return index;
 }
+
 
 float ReturnSmallestDistance(float line[], int index)
 {
   float shortest = 666;
-  for (int i = index; i >= 50; i--)
+  for (int i = index; i >= numberOfWindows; i--)
   {
     if (line[i] < shortest && line[i] !=0)
       shortest = line[i];
@@ -44,13 +63,13 @@ float ReturnSmallestDistance(float line[], int index)
 void writeToFile(float line[], int height)
 {
   std::ofstream output;
-  output.open("mid_values.txt", std::ios::out | std::ios::app);
+  output.open("10-05-open5.txt", std::ios::out | std::ios::app);
   for(int i=0;i<height;i++)
   {
-    output << line[i];
-    if(i != height-1)
+    output << line[i] << ",";
+    if(i == height-1)
     {
-      output << ",";
+      output << 0 << "," << 0 << "," << 1;
     }
   }
   output << std::endl;   
@@ -73,14 +92,21 @@ void Cbfunc(const sensor_msgs::ImageConstPtr& msg)
 
   int height = 376;
   int width = 672;
-
-  float rightline[height];
-  float midline[height];
-  float leftline[height];
+  int no_of_lines = 10;
+  float rightline[no_of_lines][height];
+  float midline[no_of_lines][height];
+  float leftline[no_of_lines][height];
   float distVal[3];
+  std::vector<int> indexLList;
+  std::vector<int> indexMList;
+  std::vector<int> indexRList;
   int indexL;
   int indexM;
   int indexR;
+  int lastIndexL = 0;
+  int lastIndexM = 0;
+  int lastIndexR = 0;
+  float alpha = 1;
 
     
   //-------extracting pixel values-----------------------------------------
@@ -91,37 +117,87 @@ void Cbfunc(const sensor_msgs::ImageConstPtr& msg)
     {
       cv::Scalar intensity = cv_ptr->image.at<float>(n,m);
       depthMap[n][m]= intensity.val[0];
-      if(m==(width/4))
-         rightline[n] = depthMap[n][m];
-      if(m==(2*width/4))
-         midline[n] = depthMap[n][m];
-      if(m==(3*width/4))
-        leftline[n] = depthMap[n][m];
+      if(m==(width/4)- (no_of_lines/2))
+        for(int i=0;i<no_of_lines; i++)
+          {
+            rightline[i][n] = depthMap[n][m+i];
+
+          }
+      if(m==(width/2)- (no_of_lines/2))
+        for(int i=0;i<no_of_lines; i++)
+          {
+            midline[i][n] = depthMap[n][m+i];
+
+          }
+      if(m==(3*width/4)- (no_of_lines/2))
+        for(int i=0;i<no_of_lines; i++)
+          {
+            leftline[i][n] = depthMap[n][m+i];
+
+          }
     }
   }
   //pixel index of nearest object in each line
-  indexL = ReturnEndOfFloor(leftline, 50, height);
-  indexM = ReturnEndOfFloor(midline, 50, height);
-  indexR = ReturnEndOfFloor(rightline, 50, height);
+  for (int i=0; i < no_of_lines; i++)
+  {   
+  indexLList.push_back(ReturnEndOfFloor(leftline[i], numberOfWindows, height));
+  indexMList.push_back(ReturnEndOfFloor(midline[i], numberOfWindows, height));
+  indexRList.push_back(ReturnEndOfFloor(rightline[i], numberOfWindows, height));
   //distance values of those pixels
-  distVal[0] = ReturnSmallestDistance(leftline,indexL);
-  distVal[1] = ReturnSmallestDistance(midline,indexM);
-  distVal[2] = ReturnSmallestDistance(rightline,indexR);
-  /*
   //for data collecting, writes midline to txt file
-  writeToFile(midline, height);
+  //writeToFile(midline, height);
   //produces viewable image
+  }
+
+  if (firstFrame)
+  {
+  lastIndexL = (indexLList.at(no_of_lines/2));
+  lastIndexM = (indexMList.at(no_of_lines/2));
+  lastIndexR = (indexRList.at(no_of_lines/2));
+  firstFrame = false; 
+  }
+
+  std::sort(indexLList.begin(), indexLList.end());
+  std::sort(indexMList.begin(), indexMList.end());
+  std::sort(indexRList.begin(), indexRList.end());
+
+  indexL = alpha * (indexLList.at(no_of_lines/2)) + (1 - alpha) * lastIndexL;
+  indexM = alpha * (indexMList.at(no_of_lines/2)) + (1 - alpha) * lastIndexM;
+  indexR = alpha * (indexRList.at(no_of_lines/2)) + (1 - alpha) * lastIndexR;
+
+  lastIndexL = indexL;
+  lastIndexM = indexM;
+  lastIndexR = indexR;
+
+
+  distVal[0] = ReturnSmallestDistance(leftline[(no_of_lines/2)+1], indexL);
+  distVal[1] = ReturnSmallestDistance(midline[(no_of_lines/2)+1], indexM);
+  distVal[2] = ReturnSmallestDistance(rightline[(no_of_lines/2)+1], indexR);
+  
+  
   double minVal, maxVal;
   minMaxLoc(cv_ptr->image, &minVal, &maxVal); //find minimum and maximum intensities
+  //ROS_INFO("MAXVAL: %f\n MINVAL: %f\n", maxVal, minVal);
   cv::Mat blur_img;
+  if(minVal < 0.7)
+  {
+    minVal=0;
+  }
+  if(maxVal>20)
+  {
+    maxVal=20;
+  }
   cv_ptr->image.convertTo(blur_img, CV_8U, 255.0/(maxVal - minVal), -minVal * 255.0/(maxVal - minVal));
   //draws circles on all nearest distances
-  cv::circle(blur_img, cv::Point((2*width/4), indexM), 10, CV_RGB(255,0,0));
-  cv::circle(blur_img, cv::Point((3*width/4), indexL), 10, CV_RGB(255,0,0));
-  cv::circle(blur_img, cv::Point((width/4), indexR), 10, CV_RGB(255,0,0));
+  /*cv::circle(blur_img, cv::Point((width/4), indexR), 10, cv::Scalar(255,0,0),2);
+  cv::circle(blur_img, cv::Point((2*width/4), indexM), 10, cv::Scalar(255,0,0),2);
+  cv::circle(blur_img, cv::Point((3*width/4), indexL), 10, cv::Scalar(255,0,0),2);
+  cv::line(blur_img, cv::Point((width/4), 0), cv::Point((width/4), height), cv::Scalar(255,0,0), 2, 8);
+  cv::line(blur_img, cv::Point((2*width/4), 0), cv::Point((2*width/4), height), cv::Scalar(255,0,0), 2, 8);
+  cv::line(blur_img, cv::Point((3*width/4), 0), cv::Point((3*width/4), height), cv::Scalar(255,0,0), 2, 8);
+  
   cv::imshow(OPENCV_WINDOW, blur_img);
-  cv::waitKey(3);
-  */
+  cv::waitKey(3);*/
   //put data in msg and publish-----------------------------------------------------
   blindy_findy::distances dmsg;
   dmsg.distL = distVal[0];
@@ -136,6 +212,14 @@ void Cbfunc(const sensor_msgs::ImageConstPtr& msg)
 
   ROS_INFO("L: %f\nM: %f\nR: %f\n", dmsg.distL, dmsg.distM, dmsg.distR);
   pub->publish(dmsg);
+
+  /*blindy_findy::frame fmsg;
+  for(int i=0;i<376;i++)
+  {
+    fmsg.stairFrame[i] = midline[i];
+  }
+  ROS_INFO("frame[0]: %f\n", fmsg.stairFrame[0]);
+  pub2->publish(fmsg);*/
 }
 
 int main(int argc, char** argv)
@@ -149,8 +233,11 @@ int main(int argc, char** argv)
   
   ros::Publisher publisher = nh.advertise<blindy_findy::distances>("distances", 1);
   pub = &publisher;
-  image_sub = it.subscribe("/depth/depth_registered", 1, Cbfunc);
+  ros::Publisher publisher2 = nh.advertise<blindy_findy::frame>("frames", 1);
+  pub2 = &publisher2;
+  
 
+  image_sub = it.subscribe("/depth/depth_registered", 1, Cbfunc);
   image_pub = it.advertise("/output_video", 1);
   cv::namedWindow(OPENCV_WINDOW);
   
