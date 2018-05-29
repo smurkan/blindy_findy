@@ -11,7 +11,7 @@
 #include <vector>
 #include <algorithm>
 #include "blindy_findy/distances.h"
-#include "blindy_findy/frame.h"
+//#include "blindy_findy/frame.h"
 
 static const std::string OPENCV_WINDOW = "Image window";
 
@@ -233,8 +233,8 @@ int main(int argc, char** argv)
   
   ros::Publisher publisher = nh.advertise<blindy_findy::distances>("distances", 1);
   pub = &publisher;
-  ros::Publisher publisher2 = nh.advertise<blindy_findy::frame>("frames", 1);
-  pub2 = &publisher2;
+  //ros::Publisher publisher2 = nh.advertise<blindy_findy::frame>("frames", 1);
+  //pub2 = &publisher2;
   
 
   image_sub = it.subscribe("/depth/depth_registered", 1, Cbfunc);
